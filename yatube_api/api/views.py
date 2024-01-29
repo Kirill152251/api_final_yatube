@@ -1,10 +1,10 @@
 from django.shortcuts import get_object_or_404
-from posts.models import Group, Post, User
-from rest_framework import mixins, viewsets
+from rest_framework import viewsets
 from rest_framework.filters import SearchFilter
 from rest_framework.pagination import LimitOffsetPagination
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 
+from posts.models import Group, Post
 from .permissions import AuthorOrReadOnly
 from .serializers import (
     CommentSerializer,
@@ -12,6 +12,11 @@ from .serializers import (
     GroupSerializer,
     PostSerializer
 )
+from .viewsets import CreateGetListViewset
+
+
+def get_post(pk):
+    return get_object_or_404(Post, pk=pk)
 
 
 class PostViewSet(viewsets.ModelViewSet):
@@ -29,24 +34,20 @@ class CommentViewSet(viewsets.ModelViewSet):
     permission_classes = [AuthorOrReadOnly]
 
     def get_queryset(self):
-        post = get_object_or_404(Post, pk=self.kwargs['post_id'])
-        return post.comments
+        return get_post(self.kwargs['post_id']).comments.all()
 
     def perform_create(self, serializer):
-        post = get_object_or_404(Post, pk=self.kwargs['post_id'])
+        post = get_post(self.kwargs['post_id'])
         serializer.save(author=self.request.user, post=post)
 
 
 class GroupViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
+    permission_classes = [AllowAny]
 
 
-class FollowViewSet(
-    mixins.CreateModelMixin,
-    mixins.ListModelMixin,
-    viewsets.GenericViewSet
-):
+class FollowViewSet(CreateGetListViewset):
     serializer_class = FollowSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = (SearchFilter,)
@@ -56,7 +57,4 @@ class FollowViewSet(
         return self.request.user.follows.all()
 
     def perform_create(self, serializer):
-        following = get_object_or_404(
-            User, username=self.request.data.get('following')
-        )
-        serializer.save(user=self.request.user, following=following)
+        serializer.save(user=self.request.user)
